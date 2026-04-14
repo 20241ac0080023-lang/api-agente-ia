@@ -1,15 +1,14 @@
-// 1. Importações (Bibliotecas)
+// 1. Importações
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// 2. Configurações Iniciais do Servidor
+// 2. Configuração do servidor
 const app = express();
 
-// 🔥 CONFIGURAÇÃO CORS MELHORADA
 app.use(cors({
-    origin: "*", // libera qualquer frontend (ideal para teste)
+    origin: "*",
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type"]
 }));
@@ -25,48 +24,57 @@ if (!apiKey) {
 
 const genAI = new GoogleGenerativeAI(apiKey);
 
-// 4. ROTA DE TESTE (IMPORTANTE PRA DEBUG)
+// 4. Rota de teste
 app.get('/', (req, res) => {
     res.send("🚀 API está online!");
 });
 
-// 5. ROTA PRINCIPAL
+// 5. Rota principal
 app.post('/api/chat', async (req, res) => {
     try {
-        if (!req.body) {
-            return res.status(400).json({ erro: "Requisição sem corpo." });
-        }
-
         const { pergunta } = req.body;
 
         if (!pergunta) {
-            return res.status(400).json({ erro: "Envie uma pergunta." });
+            return res.status(400).json({
+                sucesso: false,
+                erro: "Envie uma pergunta."
+            });
         }
 
-        console.log(`📩 Pergunta: ${pergunta}`);
-
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.5-flash"
+        });
 
         const promptFinal = `Você é um robô sarcástico. Responda: ${pergunta}`;
 
         const result = await model.generateContent(promptFinal);
+
         const respostaDaIA = result.response.text();
 
-        return res.status(200).json({
+        // 🔥 GARANTE QUE SEMPRE EXISTA RESPOSTA
+        if (!respostaDaIA) {
+            return res.status(500).json({
+                sucesso: false,
+                erro: "A IA não retornou resposta."
+            });
+        }
+
+        return res.json({
             sucesso: true,
             resposta: respostaDaIA
         });
 
     } catch (erro) {
-        console.error("❌ Erro:", erro);
+        console.error("❌ ERRO NO SERVIDOR:", erro);
 
         return res.status(500).json({
-            erro: "Erro interno no servidor"
+            sucesso: false,
+            erro: "Erro ao comunicar com a IA."
         });
     }
 });
 
-// 6. Ligar o Servidor
+// 6. Porta
 const PORTA = process.env.PORT || 3000;
 
 app.listen(PORTA, () => {
