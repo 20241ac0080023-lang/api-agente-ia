@@ -29,7 +29,16 @@ app.get('/', (req, res) => {
     res.send("🚀 API está online!");
 });
 
-// 5. Rota principal
+// 5. Health Check
+app.get('/api/health', (req, res) => {
+    return res.status(200).json({
+        status: "ok",
+        api: "online",
+        timestamp: new Date().toISOString()
+    });
+});
+
+// 6. Rota principal
 app.post('/api/chat', async (req, res) => {
     try {
         const { pergunta } = req.body;
@@ -74,7 +83,7 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
-// 6. Porta
+// 7. Porta
 const PORTA = process.env.PORT || 3000;
 
 app.listen(PORTA, () => {
