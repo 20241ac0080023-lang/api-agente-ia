@@ -1,58 +1,65 @@
 // 1. Importações
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const multer = require("multer");
+const { PDFParse } = require("pdf-parse");
+
 
 // 2. Configuração do servidor
 const app = express();
 const usuarios = [];
 
-const JWT_SECRET = process.env.JWT_SECRET || 'segredo-temporario-sprint5';
+const JWT_SECRET = process.env.JWT_SECRET || "segredo-temporario-sprint5";
+const upload = multer({
+  storage: multer.memoryStorage(),
+});
 
 function verificarToken(req, res, next) {
-    const autorizacao = req.headers.authorization;
+  const autorizacao = req.headers.authorization;
 
-    if (!autorizacao) {
-        return res.status(401).json({
-            sucesso: false,
-            erro: "Token não informado."
-        });
-    }
+  if (!autorizacao) {
+    return res.status(401).json({
+      sucesso: false,
+      erro: "Token não informado.",
+    });
+  }
 
-    const partes = autorizacao.split(" ");
+  const partes = autorizacao.split(" ");
 
-    if (partes.length !== 2 || partes[0] !== "Bearer") {
-        return res.status(401).json({
-            sucesso: false,
-            erro: "Formato do token inválido."
-        });
-    }
+  if (partes.length !== 2 || partes[0] !== "Bearer") {
+    return res.status(401).json({
+      sucesso: false,
+      erro: "Formato do token inválido.",
+    });
+  }
 
-    const token = partes[1];
+  const token = partes[1];
 
-    try {
-        const usuario = jwt.verify(token, JWT_SECRET);
+  try {
+    const usuario = jwt.verify(token, JWT_SECRET);
 
-        req.usuario = usuario;
+    req.usuario = usuario;
 
-        next();
-
-    } catch (erro) {
-        return res.status(401).json({
-            sucesso: false,
-            erro: "Token inválido ou expirado."
-        });
-    }
+    next();
+  } catch (erro) {
+    return res.status(401).json({
+      sucesso: false,
+      erro: "Token inválido ou expirado.",
+    });
+  }
 }
 
-app.use(cors({
+app.use(
+  cors({
     origin: "*",
     methods: ["GET", "POST", "OPTIONS"],
-allowedHeaders: ["Content-Type", "Authorization"]
-}));
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
 
 app.use(express.json());
 
@@ -60,186 +67,248 @@ app.use(express.json());
 const apiKey = process.env.GEMINI_API_KEY;
 
 if (!apiKey) {
-    console.error("❌ ERRO: API KEY não encontrada!");
+  console.error("❌ ERRO: API KEY não encontrada!");
 }
 
 const genAI = new GoogleGenerativeAI(apiKey);
 
 // 4. Rota de teste
-app.get('/', (req, res) => {
-    res.send("🚀 API está online!");
+app.get("/", (req, res) => {
+  res.send("🚀 API está online!");
 });
 
 // 5. Autenticação
 
-app.post('/api/register', async (req, res) => {
-    try {
-        const { nome, email, senha } = req.body;
+app.post("/api/register", async (req, res) => {
+  try {
+    const { nome, email, senha } = req.body;
 
-        if (!nome || !email || !senha) {
-            return res.status(400).json({
-                sucesso: false,
-                erro: "Nome, email e senha são obrigatórios."
-            });
-        }
-
-        const usuarioExistente = usuarios.find(usuario => usuario.email === email);
-
-        if (usuarioExistente) {
-            return res.status(409).json({
-                sucesso: false,
-                erro: "Este email já está cadastrado."
-            });
-        }
-
-        const senhaHash = await bcrypt.hash(senha, 10);
-
-        const novoUsuario = {
-            id: usuarios.length + 1,
-            nome,
-            email,
-            senha: senhaHash
-        };
-
-        usuarios.push(novoUsuario);
-
-        return res.status(201).json({
-            sucesso: true,
-            mensagem: "Usuário cadastrado com sucesso."
-        });
-
-    } catch (erro) {
-        console.error("Erro no cadastro:", erro);
-
-        return res.status(500).json({
-            sucesso: false,
-            erro: "Erro ao cadastrar usuário."
-        });
+    if (!nome || !email || !senha) {
+      return res.status(400).json({
+        sucesso: false,
+        erro: "Nome, email e senha são obrigatórios.",
+      });
     }
-});
 
-app.post('/api/login', async (req, res) => {
-    
-    try {
-        const { email, senha } = req.body;
+    const usuarioExistente = usuarios.find(
+      (usuario) => usuario.email === email,
+    );
 
-        if (!email || !senha) {
-            return res.status(400).json({
-                sucesso: false,
-                erro: "Email e senha são obrigatórios."
-            });
-        }
-
-        const usuario = usuarios.find(usuario => usuario.email === email);
-
-        if (!usuario) {
-            return res.status(401).json({
-                sucesso: false,
-                erro: "Email ou senha inválidos."
-            });
-        }
-
-        const senhaCorreta = await bcrypt.compare(senha, usuario.senha);
-
-        if (!senhaCorreta) {
-            return res.status(401).json({
-                sucesso: false,
-                erro: "Email ou senha inválidos."
-            });
-        }
-
-        const token = jwt.sign(
-            {
-                id: usuario.id,
-                nome: usuario.nome,
-                email: usuario.email
-            },
-            JWT_SECRET,
-            {
-                expiresIn: '2h'
-            }
-        );
-
-        return res.json({
-            sucesso: true,
-            mensagem: "Login realizado com sucesso.",
-            token
-        });
-
-    } catch (erro) {
-        console.error("Erro no login:", erro);
-
-        return res.status(500).json({
-            sucesso: false,
-            erro: "Erro ao realizar login."
-        });
+    if (usuarioExistente) {
+      return res.status(409).json({
+        sucesso: false,
+        erro: "Este email já está cadastrado.",
+      });
     }
-});
 
-app.post('/api/logout', verificarToken, (req, res) => {
-    return res.json({
-        sucesso: true,
-        mensagem: "Logout realizado com sucesso."
+    const senhaHash = await bcrypt.hash(senha, 10);
+
+    const novoUsuario = {
+      id: usuarios.length + 1,
+      nome,
+      email,
+      senha: senhaHash,
+    };
+
+    usuarios.push(novoUsuario);
+
+    return res.status(201).json({
+      sucesso: true,
+      mensagem: "Usuário cadastrado com sucesso.",
     });
+  } catch (erro) {
+    console.error("Erro no cadastro:", erro);
+
+    return res.status(500).json({
+      sucesso: false,
+      erro: "Erro ao cadastrar usuário.",
+    });
+  }
+});
+
+app.post("/api/login", async (req, res) => {
+  try {
+    const { email, senha } = req.body;
+
+    if (!email || !senha) {
+      return res.status(400).json({
+        sucesso: false,
+        erro: "Email e senha são obrigatórios.",
+      });
+    }
+
+    const usuario = usuarios.find((usuario) => usuario.email === email);
+
+    if (!usuario) {
+      return res.status(401).json({
+        sucesso: false,
+        erro: "Email ou senha inválidos.",
+      });
+    }
+
+    const senhaCorreta = await bcrypt.compare(senha, usuario.senha);
+
+    if (!senhaCorreta) {
+      return res.status(401).json({
+        sucesso: false,
+        erro: "Email ou senha inválidos.",
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        id: usuario.id,
+        nome: usuario.nome,
+        email: usuario.email,
+      },
+      JWT_SECRET,
+      {
+        expiresIn: "2h",
+      },
+    );
+
+    return res.json({
+      sucesso: true,
+      mensagem: "Login realizado com sucesso.",
+      token,
+    });
+  } catch (erro) {
+    console.error("Erro no login:", erro);
+
+    return res.status(500).json({
+      sucesso: false,
+      erro: "Erro ao realizar login.",
+    });
+  }
+});
+
+app.post("/api/logout", verificarToken, (req, res) => {
+  return res.json({
+    sucesso: true,
+    mensagem: "Logout realizado com sucesso.",
+  });
 });
 
 // 5. Health Check
-app.get('/api/health', (req, res) => {
-    return res.status(200).json({
-        status: "ok",
-        api: "online",
-        timestamp: new Date().toISOString()
-    });
+app.get("/api/health", (req, res) => {
+  return res.status(200).json({
+    status: "ok",
+    api: "online",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // 6. Rota principal
-app.post('/api/chat', verificarToken, async (req, res) => {
-            try {
-        const { pergunta } = req.body;
+app.post("/api/chat", verificarToken, async (req, res) => {
+  try {
+    const { pergunta } = req.body;
 
-        if (!pergunta) {
+    if (!pergunta) {
+      return res.status(400).json({
+        sucesso: false,
+        erro: "Envie uma pergunta.",
+      });
+    }
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+    });
+
+    const promptFinal = `Você é um robô sarcástico. Responda: ${pergunta}`;
+
+    const result = await model.generateContent(promptFinal);
+
+    const respostaDaIA = result.response.text();
+
+    // 🔥 GARANTE QUE SEMPRE EXISTA RESPOSTA
+    if (!respostaDaIA) {
+      return res.status(500).json({
+        sucesso: false,
+        erro: "A IA não retornou resposta.",
+      });
+    }
+
+    return res.json({
+      sucesso: true,
+      resposta: respostaDaIA,
+    });
+  } catch (erro) {
+    console.error("❌ ERRO NO SERVIDOR:", erro);
+
+    return res.status(500).json({
+      sucesso: false,
+      erro: "Erro ao comunicar com a IA.",
+    });
+  }
+});
+
+// 7. Rota para upload e leitura de documento
+app.post('/api/chat/documento', verificarToken, upload.single('documento'), async (req, res) => {
+        try {
+
+        if (!req.files || req.files.length === 0) {
             return res.status(400).json({
                 sucesso: false,
-                erro: "Envie uma pergunta."
+                erro: "Nenhum arquivo foi enviado."
             });
         }
 
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash"
+      const pergunta = req.body.pergunta;
+
+      if (!pergunta) {
+        return res.status(400).json({
+          sucesso: false,
+          erro: "Envie uma pergunta.",
+        });
+      }
+
+      let textoDocumento = "";
+
+      // Se for PDF
+      if (req.file.originalname.toLowerCase().endsWith(".pdf")) {
+        const parser = new PDFParse({
+          data: req.file.buffer,
         });
 
-        const promptFinal = `Você é um robô sarcástico. Responda: ${pergunta}`;
+        const dadosPDF = await parser.getText();
 
-        const result = await model.generateContent(promptFinal);
+        textoDocumento = dadosPDF.text;
 
-        const respostaDaIA = result.response.text();
-
-        // 🔥 GARANTE QUE SEMPRE EXISTA RESPOSTA
-        if (!respostaDaIA) {
-            return res.status(500).json({
-                sucesso: false,
-                erro: "A IA não retornou resposta."
-            });
-        }
-
-        return res.json({
-            sucesso: true,
-            resposta: respostaDaIA
+        await parser.destroy();
+      }
+      // Se for TXT
+      else if (req.file.originalname.toLowerCase().endsWith(".txt")) {
+        textoDocumento = req.file.buffer.toString("utf8");
+      } else {
+        return res.status(400).json({
+          sucesso: false,
+          erro: "Apenas arquivos PDF ou TXT são permitidos.",
         });
+      }
 
+      return res.json({
+        sucesso: true,
+        mensagem: "Documento lido com sucesso.",
+        arquivo: req.file.originalname,
+        tamanho: req.file.size,
+        pergunta: pergunta,
+        caracteres: textoDocumento.length,
+        texto: textoDocumento,
+      });
     } catch (erro) {
-        console.error("❌ ERRO NO SERVIDOR:", erro);
+      console.error("Erro ao processar documento:", erro);
 
-        return res.status(500).json({
-            sucesso: false,
-            erro: "Erro ao comunicar com a IA."
-        });
+      return res.status(500).json({
+        sucesso: false,
+        erro: "Erro ao ler o documento.",
+      });
     }
-});
+  },
+);
 
 // 7. Porta
 const PORTA = process.env.PORT || 3000;
 
 app.listen(PORTA, () => {
-    console.log(`🚀 Rodando na porta ${PORTA}`);
+  console.log(`🚀 Rodando na porta ${PORTA}`);
 });
